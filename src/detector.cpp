@@ -5,6 +5,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/crop_box.h>
+#include <pcl/filters/approximate_voxel_grid.h>
 #include <pcl_conversions/pcl_conversions.h>
 
 #include <cmath>
@@ -20,37 +21,48 @@ private:
     ros::Publisher croppedCloudPub; //for debugging
     ros::Publisher targetPub; //sends the detected target point
 
-    pcl::PointCloud<pcl::PointXYZRGB> pointCloud; //the current pointcloud of the environment
-    pcl::CropBox<pcl::PointXYZRGB> cropBox; //filter to remove all parts outside a box
+    pcl::PointCloud<pcl::PointXYZ> pointCloud; //the current pointcloud of the environment
+    pcl::CropBox<pcl::PointXYZ> cropBox; //filter to remove all parts outside a box
+    pcl::ApproximateVoxelGrid<pcl::PointXYZ> voxelGrid; //downsample data
 
 
     //extract a 3D box from the pointcloud
-    pcl::PointCloud<pcl::PointXYZRGB> maskPointCloud(){
+    pcl::PointCloud<pcl::PointXYZ> maskPointCloud(const pcl::PointCloud<pcl::PointXYZ>& pc){
 
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr tmp_ptr = pointCloud.makeShared();
+        pcl::PointCloud<pcl::PointXYZ>::Ptr tmp_ptr = pc.makeShared();
         cropBox.setInputCloud(tmp_ptr);
 
-        pcl::PointCloud<pcl::PointXYZRGB> newPointCloud;
+        pcl::PointCloud<pcl::PointXYZ> newPointCloud;
         cropBox.filter(newPointCloud);
 
         return newPointCloud;
     }
 
-    //finds the closest point to the basis
-    pcl::PointXYZ findClosestPoint(pcl::PointCloud<pcl::PointXYZRGB> pc){
+    //downsample the given pointcloud
+    pcl::PointCloud<pcl::PointXYZ> downSample(const pcl::PointCloud<pcl::PointXYZ>& pc){
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr tmp_ptr = pc.makeShared();
+        voxelGrid.setInputCloud(tmp_ptr);
+
+        pcl::PointCloud<pcl::PointXYZ> newPointCloud;
+        voxelGrid.filter(newPointCloud);
+
+        return newPointCloud;
+    }
+
+    //finds the closest point to the origin
+    pcl::PointXYZ findClosestPoint(pcl::PointCloud<pcl::PointXYZ> pc){
 
         pcl::PointXYZ closestPoint;
         double minDistance = 100;
 
         for(size_t i = 0; i < pc.points.size(); i++){
-            pcl::PointXYZRGB currPoint = pc.points[i];
+            pcl::PointXYZ currPoint = pc.points[i];
             double dist = std::sqrt(std::pow(currPoint.x, 2) + std::pow(currPoint.y, 2) + std::pow(currPoint.z, 2));
 
             if(dist < minDistance){
                 minDistance = dist;
-                closestPoint.x = currPoint.x;
-                closestPoint.y = currPoint.y;
-                closestPoint.z = currPoint.z;
+                closestPoint = currPoint;
                 //ROS_INFO("new min dist: %f", minDistance);
             }
         }
@@ -68,10 +80,14 @@ public:
         croppedCloudPub = nh.advertise<sensor_msgs::PointCloud2>("hand_detector/cropped", 1);
         targetPub = nh.advertise<geometry_msgs::Point>("hand_detector/target", 1);
 
-        cropBox = pcl::CropBox<pcl::PointXYZRGB>();
+        cropBox = pcl::CropBox<pcl::PointXYZ>();
 
         cropBox.setMin(Eigen::Vector4f(-0.5, -0.5, 0.0, 1.0));
         cropBox.setMax(Eigen::Vector4f(0.5, 0.5, 10.0, 1.0));
+
+        voxelGrid = pcl::ApproximateVoxelGrid<pcl::PointXYZ>();
+
+        voxelGrid.setLeafSize(0.1, 0.1, 0.05);
 
         return;
     }
@@ -88,13 +104,14 @@ public:
     //the main function that detects the hand (or object) in the pointcloud
     void detectHand(){
 
-        pcl::PointCloud<pcl::PointXYZRGB> croppedPointCloud = maskPointCloud();
+        pcl::PointCloud<pcl::PointXYZ> croppedPointCloud = maskPointCloud(pointCloud);
+        pcl::PointCloud<pcl::PointXYZ> downSampledPointCloud = downSample(croppedPointCloud);
 
-        pcl::PointXYZ closestPoint = findClosestPoint(croppedPointCloud);
+        pcl::PointXYZ closestPoint = findClosestPoint(downSampledPointCloud);
 
-        sensor_msgs::PointCloud2 croppedCloudMsg;
-        pcl::toROSMsg(croppedPointCloud, croppedCloudMsg);
-        croppedCloudPub.publish(croppedCloudMsg);
+        sensor_msgs::PointCloud2 dsCloudMsg;
+        pcl::toROSMsg(downSampledPointCloud, dsCloudMsg);
+        croppedCloudPub.publish(dsCloudMsg);
 
         geometry_msgs::Point targetPoint;
         targetPoint.x = closestPoint.x;
