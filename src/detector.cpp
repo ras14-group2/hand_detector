@@ -173,7 +173,7 @@ int main(int argc, char **argv){
 
     Detector detector;
 
-    ros::Rate loop_rate(5);
+    ros::Rate loop_rate(10);
 
     while(ros::ok()){
 
