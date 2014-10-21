@@ -111,6 +111,7 @@ public:
         cropBox = pcl::CropBox<pcl::PointXYZ>();
         cropBox.setMin(Eigen::Vector4f(-0.5, -0.5, 0.0, 1.0));
         cropBox.setMax(Eigen::Vector4f(0.5, 0.5, 3.0, 1.0));
+        cropBox.setKeepOrganized(true);
 
         fineGrid = pcl::ApproximateVoxelGrid<pcl::PointXYZ>();
         fineGrid.setLeafSize(0.05, 0.05, 0.02);
@@ -140,13 +141,11 @@ public:
         ROS_INFO("inputdata organized: %d", pointCloud.isOrganized());
         pcl::PointCloud<pcl::PointXYZ> croppedPointCloud = maskPointCloud(pointCloud);
         ROS_INFO("cropped data organized: %d", croppedPointCloud.isOrganized());
-        pcl::PointCloud<pcl::PointXYZ> fineGridPointCloud = sampleFineGrid(croppedPointCloud);
-        ROS_INFO("fine grid cloud organized: %d", fineGridPointCloud.isOrganized());
-        //pcl::PointCloud<pcl::PointXYZ> cleanedPointCloud = removeOutliners(fineGridPointCloud);
-        //ROS_INFO("cleaned data organized: %d", cleanedPointCloud.isOrganized());
-        pcl::PointCloud<pcl::PointXYZ> coarseGridPointCloud = sampleCoarseGrid(fineGridPointCloud);
-        ROS_INFO("coarse grid cloud organized: %d", coarseGridPointCloud.isOrganized());
+//        pcl::PointCloud<pcl::PointXYZ> fineGridPointCloud = sampleFineGrid(pointCloud);
+//        ROS_INFO("fine grid cloud organized: %d", fineGridPointCloud.isOrganized());
+        pcl::PointCloud<pcl::PointXYZ> cleanedPointCloud = removeOutliners(croppedPointCloud);
         ROS_INFO("cleaned data organized: %d", cleanedPointCloud.isOrganized());
+        pcl::PointCloud<pcl::PointXYZ> coarseGridPointCloud = sampleCoarseGrid(cleanedPointCloud);
         ROS_INFO("coarse grid cloud organized: %d", coarseGridPointCloud.isOrganized());
 
 
