@@ -24,6 +24,7 @@ private:
     ros::Publisher targetPub; //sends the detected target point
 
     pcl::PointCloud<pcl::PointXYZ> pointCloud; //the current pointcloud of the environment
+
     pcl::CropBox<pcl::PointXYZ> cropBox; //filter to remove all parts outside a box
     pcl::ApproximateVoxelGrid<pcl::PointXYZ> fineGrid; //downsample data
     pcl::ApproximateVoxelGrid<pcl::PointXYZ> coarseGrid; //downsample data
@@ -108,8 +109,8 @@ public:
         targetPub = nh.advertise<geometry_msgs::Point>("hand_detector/target", 1);
 
         cropBox = pcl::CropBox<pcl::PointXYZ>();
-        cropBox.setMin(Eigen::Vector4f(-0.5, -0.5, 0.0, 1.0));
-        cropBox.setMax(Eigen::Vector4f(0.5, 0.5, 2.0, 1.0));
+        cropBox.setMin(Eigen::Vector4f(-0.25, -0.2, 0.0, 1.0));
+        cropBox.setMax(Eigen::Vector4f(0.25, 0.8, 1.5, 1.0));
         cropBox.setKeepOrganized(true);
 
         fineGrid = pcl::ApproximateVoxelGrid<pcl::PointXYZ>();
@@ -119,10 +120,8 @@ public:
         coarseGrid.setLeafSize(0.1, 0.1, 0.02);
 
         outlierRemoval = pcl::StatisticalOutlierRemoval<pcl::PointXYZ>();
-        outlierRemoval.setMeanK(50);
+        outlierRemoval.setMeanK(40);
         outlierRemoval.setStddevMulThresh(0.5);
-
-
 
         return;
     }
