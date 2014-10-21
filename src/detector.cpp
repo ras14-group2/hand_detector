@@ -139,8 +139,8 @@ public:
 
         pcl::PointCloud<pcl::PointXYZ> croppedPointCloud = maskPointCloud(pointCloud);
         pcl::PointCloud<pcl::PointXYZ> fineGridPointCloud = sampleFineGrid(croppedPointCloud);
-        pcl::PointCloud<pcl::PointXYZ> cleanedPointCloud = removeOutliners(fineGridPointCloud);
-        pcl::PointCloud<pcl::PointXYZ> coarseGridPointCloud = sampleCoarseGrid(cleanedPointCloud);
+        //pcl::PointCloud<pcl::PointXYZ> cleanedPointCloud = removeOutliners(fineGridPointCloud);
+        pcl::PointCloud<pcl::PointXYZ> coarseGridPointCloud = sampleCoarseGrid(fineGridPointCloud);
 
 
         pcl::PointXYZ closestPoint = findClosestPoint(coarseGridPointCloud);
