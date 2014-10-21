@@ -83,7 +83,7 @@ public:
         cropBox = pcl::CropBox<pcl::PointXYZ>();
 
         cropBox.setMin(Eigen::Vector4f(-0.5, -0.5, 0.0, 1.0));
-        cropBox.setMax(Eigen::Vector4f(0.5, 0.5, 10.0, 1.0));
+        cropBox.setMax(Eigen::Vector4f(0.5, 0.5, 3.0, 1.0));
 
         voxelGrid = pcl::ApproximateVoxelGrid<pcl::PointXYZ>();
 
