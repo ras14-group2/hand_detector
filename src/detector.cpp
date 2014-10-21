@@ -137,10 +137,15 @@ public:
     //the main function that detects the hand (or object) in the pointcloud
     void detectHand(){
 
+        ROS_INFO("inputdata organized: %d", pointCloud.isOrganized());
         pcl::PointCloud<pcl::PointXYZ> croppedPointCloud = maskPointCloud(pointCloud);
+        ROS_INFO("cropped data organized: %d", croppedPointCloud.isOrganized());
         pcl::PointCloud<pcl::PointXYZ> fineGridPointCloud = sampleFineGrid(croppedPointCloud);
+        ROS_INFO("fine grid cloud organized: %d", fineGridPointCloud.isOrganized());
         pcl::PointCloud<pcl::PointXYZ> cleanedPointCloud = removeOutliners(fineGridPointCloud);
+        ROS_INFO("cleaned data organized: %d", cleanedPointCloud.isOrganized());
         pcl::PointCloud<pcl::PointXYZ> coarseGridPointCloud = sampleCoarseGrid(cleanedPointCloud);
+        ROS_INFO("coarse grid cloud organized: %d", coarseGridPointCloud.isOrganized());
 
 
         pcl::PointXYZ closestPoint = findClosestPoint(coarseGridPointCloud);
