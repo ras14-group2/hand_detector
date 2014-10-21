@@ -6,7 +6,6 @@
 #include <pcl/point_types.h>
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/approximate_voxel_grid.h>
-//#include <pcl/filters/median_filter.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 
 #include <pcl_conversions/pcl_conversions.h>
@@ -28,7 +27,6 @@ private:
     pcl::CropBox<pcl::PointXYZ> cropBox; //filter to remove all parts outside a box
     pcl::ApproximateVoxelGrid<pcl::PointXYZ> fineGrid; //downsample data
     pcl::ApproximateVoxelGrid<pcl::PointXYZ> coarseGrid; //downsample data
-//    pcl::MedianFilter<pcl::PointXYZ> medianFilter; //median filter to remove outliers
     pcl::StatisticalOutlierRemoval<pcl::PointXYZ> outlierRemoval; //remove outliers
 
 
@@ -71,14 +69,10 @@ private:
     //apply median filter to remove outliers
     pcl::PointCloud<pcl::PointXYZ> removeoutliers(const pcl::PointCloud<pcl::PointXYZ>& pc){
 
-//        ROS_INFO("points given to outlier removal: %d", pc.points.size());
-
         pcl::PointCloud<pcl::PointXYZ>::Ptr tmp_ptr = pc.makeShared();
-        //medianFilter.setInputCloud(tmp_ptr);
         outlierRemoval.setInputCloud(tmp_ptr);
 
         pcl::PointCloud<pcl::PointXYZ> newPointCloud;
-        //medianFilter.filter(newPointCloud);
         outlierRemoval.filter(newPointCloud);
 
         return newPointCloud;
@@ -97,7 +91,6 @@ private:
             if(dist < minDistance){
                 minDistance = dist;
                 closestPoint = currPoint;
-                //ROS_INFO("new min dist: %f", minDistance);
             }
         }
         return closestPoint;
@@ -125,7 +118,6 @@ public:
         coarseGrid = pcl::ApproximateVoxelGrid<pcl::PointXYZ>();
         coarseGrid.setLeafSize(0.1, 0.1, 0.02);
 
-//        medianFilter = pcl::MedianFilter<pcl::PointXYZ>();
         outlierRemoval = pcl::StatisticalOutlierRemoval<pcl::PointXYZ>();
         outlierRemoval.setMeanK(50);
         outlierRemoval.setStddevMulThresh(0.5);
@@ -147,17 +139,10 @@ public:
     //the main function that detects the hand (or object) in the pointcloud
     void detectHand(){
 
-//        ROS_INFO("inputdata organized: %d", pointCloud.isOrganized());
         pcl::PointCloud<pcl::PointXYZ> croppedPointCloud = maskPointCloud(pointCloud);
-//        ROS_INFO("cropped data organized: %d", croppedPointCloud.isOrganized());
         pcl::PointCloud<pcl::PointXYZ> fineGridPointCloud = sampleFineGrid(croppedPointCloud);
-//        ROS_INFO("fine grid cloud organized: %d", fineGridPointCloud.isOrganized());
         pcl::PointCloud<pcl::PointXYZ> cleanedPointCloud = removeoutliers(fineGridPointCloud);
-//        ROS_INFO("cleaned data organized: %d", cleanedPointCloud.isOrganized());
         pcl::PointCloud<pcl::PointXYZ> coarseGridPointCloud = sampleCoarseGrid(cleanedPointCloud);
-//        ROS_INFO("coarse grid cloud organized: %d", coarseGridPointCloud.isOrganized());
-
-
 
         pcl::PointXYZ closestPoint = findClosestPoint(coarseGridPointCloud);
 
