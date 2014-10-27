@@ -1,10 +1,13 @@
 #include <ros/ros.h>
 #include <geometry_msgs/Point.h>
-
 #include <sensor_msgs/PointCloud2.h>
+
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/crop_box.h>
+#include <pcl/filters/approximate_voxel_grid.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+
 #include <pcl_conversions/pcl_conversions.h>
 
 #include <cmath>
@@ -20,38 +23,75 @@ private:
     ros::Publisher croppedCloudPub; //for debugging
     ros::Publisher targetPub; //sends the detected target point
 
-    pcl::PointCloud<pcl::PointXYZRGB> pointCloud; //the current pointcloud of the environment
-    pcl::CropBox<pcl::PointXYZRGB> cropBox; //filter to remove all parts outside a box
+    pcl::PointCloud<pcl::PointXYZ> pointCloud; //the current pointcloud of the environment
+
+    pcl::CropBox<pcl::PointXYZ> cropBox; //filter to remove all parts outside a box
+    pcl::ApproximateVoxelGrid<pcl::PointXYZ> fineGrid; //downsample data
+    pcl::ApproximateVoxelGrid<pcl::PointXYZ> coarseGrid; //downsample data
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZ> outlierRemoval; //remove outliers
 
 
     //extract a 3D box from the pointcloud
-    pcl::PointCloud<pcl::PointXYZRGB> maskPointCloud(){
+    pcl::PointCloud<pcl::PointXYZ> maskPointCloud(const pcl::PointCloud<pcl::PointXYZ>& pc){
 
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr tmp_ptr = pointCloud.makeShared();
+        pcl::PointCloud<pcl::PointXYZ>::Ptr tmp_ptr = pc.makeShared();
         cropBox.setInputCloud(tmp_ptr);
 
-        pcl::PointCloud<pcl::PointXYZRGB> newPointCloud;
+        pcl::PointCloud<pcl::PointXYZ> newPointCloud;
         cropBox.filter(newPointCloud);
 
         return newPointCloud;
     }
 
-    //finds the closest point to the basis
-    pcl::PointXYZ findClosestPoint(pcl::PointCloud<pcl::PointXYZRGB> pc){
+    //downsample the given pointcloud with fine grid
+    pcl::PointCloud<pcl::PointXYZ> sampleFineGrid(const pcl::PointCloud<pcl::PointXYZ>& pc){
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr tmp_ptr = pc.makeShared();
+        fineGrid.setInputCloud(tmp_ptr);
+
+        pcl::PointCloud<pcl::PointXYZ> newPointCloud;
+        fineGrid.filter(newPointCloud);
+
+        return newPointCloud;
+    }
+
+    //downsample the given pointcloud with coarse grid
+    pcl::PointCloud<pcl::PointXYZ> sampleCoarseGrid(const pcl::PointCloud<pcl::PointXYZ>& pc){
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr tmp_ptr = pc.makeShared();
+         coarseGrid.setInputCloud(tmp_ptr);
+
+        pcl::PointCloud<pcl::PointXYZ> newPointCloud;
+        coarseGrid.filter(newPointCloud);
+
+        return newPointCloud;
+    }
+
+    //apply median filter to remove outliers
+    pcl::PointCloud<pcl::PointXYZ> removeoutliers(const pcl::PointCloud<pcl::PointXYZ>& pc){
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr tmp_ptr = pc.makeShared();
+        outlierRemoval.setInputCloud(tmp_ptr);
+
+        pcl::PointCloud<pcl::PointXYZ> newPointCloud;
+        outlierRemoval.filter(newPointCloud);
+
+        return newPointCloud;
+    }
+
+    //finds the closest point to the origin
+    pcl::PointXYZ findClosestPoint(const pcl::PointCloud<pcl::PointXYZ>& pc){
 
         pcl::PointXYZ closestPoint;
         double minDistance = 100;
 
         for(size_t i = 0; i < pc.points.size(); i++){
-            pcl::PointXYZRGB currPoint = pc.points[i];
+            pcl::PointXYZ currPoint = pc.points[i];
             double dist = std::sqrt(std::pow(currPoint.x, 2) + std::pow(currPoint.y, 2) + std::pow(currPoint.z, 2));
 
             if(dist < minDistance){
                 minDistance = dist;
-                closestPoint.x = currPoint.x;
-                closestPoint.y = currPoint.y;
-                closestPoint.z = currPoint.z;
-                //ROS_INFO("new min dist: %f", minDistance);
+                closestPoint = currPoint;
             }
         }
         return closestPoint;
@@ -68,10 +108,20 @@ public:
         croppedCloudPub = nh.advertise<sensor_msgs::PointCloud2>("hand_detector/cropped", 1);
         targetPub = nh.advertise<geometry_msgs::Point>("hand_detector/target", 1);
 
-        cropBox = pcl::CropBox<pcl::PointXYZRGB>();
+        cropBox = pcl::CropBox<pcl::PointXYZ>();
+        cropBox.setMin(Eigen::Vector4f(-0.25, -0.2, 0.0, 1.0));
+        cropBox.setMax(Eigen::Vector4f(0.25, 0.8, 1.5, 1.0));
+        cropBox.setKeepOrganized(true);
 
-        cropBox.setMin(Eigen::Vector4f(-0.5, -0.5, 0.0, 1.0));
-        cropBox.setMax(Eigen::Vector4f(0.5, 0.5, 10.0, 1.0));
+        fineGrid = pcl::ApproximateVoxelGrid<pcl::PointXYZ>();
+        fineGrid.setLeafSize(0.05, 0.05, 0.02);
+
+        coarseGrid = pcl::ApproximateVoxelGrid<pcl::PointXYZ>();
+        coarseGrid.setLeafSize(0.1, 0.1, 0.02);
+
+        outlierRemoval = pcl::StatisticalOutlierRemoval<pcl::PointXYZ>();
+        outlierRemoval.setMeanK(40);
+        outlierRemoval.setStddevMulThresh(0.5);
 
         return;
     }
@@ -88,13 +138,16 @@ public:
     //the main function that detects the hand (or object) in the pointcloud
     void detectHand(){
 
-        pcl::PointCloud<pcl::PointXYZRGB> croppedPointCloud = maskPointCloud();
+        pcl::PointCloud<pcl::PointXYZ> croppedPointCloud = maskPointCloud(pointCloud);
+        pcl::PointCloud<pcl::PointXYZ> fineGridPointCloud = sampleFineGrid(croppedPointCloud);
+        pcl::PointCloud<pcl::PointXYZ> cleanedPointCloud = removeoutliers(fineGridPointCloud);
+        pcl::PointCloud<pcl::PointXYZ> coarseGridPointCloud = sampleCoarseGrid(cleanedPointCloud);
 
-        pcl::PointXYZ closestPoint = findClosestPoint(croppedPointCloud);
+        pcl::PointXYZ closestPoint = findClosestPoint(coarseGridPointCloud);
 
-        sensor_msgs::PointCloud2 croppedCloudMsg;
-        pcl::toROSMsg(croppedPointCloud, croppedCloudMsg);
-        croppedCloudPub.publish(croppedCloudMsg);
+        sensor_msgs::PointCloud2 dsCloudMsg;
+        pcl::toROSMsg(coarseGridPointCloud, dsCloudMsg);
+        croppedCloudPub.publish(dsCloudMsg);
 
         geometry_msgs::Point targetPoint;
         targetPoint.x = closestPoint.x;
@@ -114,7 +167,7 @@ int main(int argc, char **argv){
 
     Detector detector;
 
-    ros::Rate loop_rate(5);
+    ros::Rate loop_rate(10);
 
     while(ros::ok()){
 
